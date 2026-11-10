@@ -162,6 +162,19 @@ tr:last-child td { border-bottom: none; }
 .howto { font-size: 13px; color: var(--muted); max-width: 75ch; display: grid; gap: 6px; }
 .howto p { margin: 0; }
 .howto b { color: var(--fg); }
+.spot { border: 1px solid var(--line); border-radius: 8px; background: var(--sunk); min-width: 0; }
+.spot > summary { list-style: none; padding: 10px 12px; display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(90px, 200px); gap: 6px 12px; align-items: center; color: var(--fg); font-weight: 400; }
+.spot > summary::-webkit-details-marker { display: none; }
+.spot > summary::before { content: "▸"; color: var(--muted); grid-row: 1; }
+.spot[open] > summary::before { content: "▾"; }
+.spot .line { font-size: 13px; min-width: 0; }
+.spot .line b { font-family: var(--font-display); }
+.spot .line .prev { color: var(--muted); }
+.spot .inner { padding: 0 12px 12px; display: grid; gap: 8px; }
+.spot .tablebox { background: var(--surface); }
+.spot .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; align-items: center; }
+.spot .legend .sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; margin-right: 4px; }
+@media (max-width: 560px) { .spot > summary { grid-template-columns: auto minmax(0, 1fr); } .spot > summary .bar { grid-column: 2; } }
 @media (prefers-reduced-motion: reduce) { .progress > div { transition: none; } }
 </style>
 </head>
@@ -235,6 +248,15 @@ tr:last-child td { border-bottom: none; }
           <div class="facts" id="facts"></div>
         </div>
         <div id="nodeBody" style="display:grid;gap:14px"></div>
+      </div>
+
+      <div class="panel" id="allPanel" hidden>
+        <div class="toolbar">
+          <h2>All strategies</h2>
+          <div class="toggle" id="whoFilter" role="group" aria-label="Show spots for"></div>
+        </div>
+        <p class="hint" id="allNote"></p>
+        <div id="allBody" style="display:grid;gap:10px"></div>
       </div>
 
       <details class="panel">
@@ -752,7 +774,93 @@ async function solve() {
     </div>`).join("");
   path = [{ node: s.root, reach: s.rootReach(), label: "Start" }];
   renderNode();
+  whoFilter = "all";
+  renderAll();
 }
+
+// ======================= All strategies =======================
+let whoFilter = "all", spots = [];
+function collectSpots(s) {
+  const out = [];
+  const walk = (node, reach, steps) => {
+    if (node.terminal) return;
+    const p = node.player;
+    let tot = 0;
+    for (let c = 0; c < node.m; c++) tot += reach[p][c] * s.weights[p][c];
+    out.push({ node, reach, steps, reached: tot > 1e-6 });
+    const avg = Solver.avg(node);
+    node.children.forEach((ch, a) => {
+      const r2 = reach.slice(); r2[p] = Solver.scaled(reach[p], avg, a, node.m);
+      walk(ch, r2, [...steps, { node: ch, reach: r2, label: `${s.names[p]} ${node.labels[a]}` }]);
+    });
+  };
+  const r0 = s.rootReach();
+  walk(s.root, r0, [{ node: s.root, reach: r0, label: "Start" }]);
+  return out;
+}
+function spotTable(s, node, reach, colors) {
+  const p = node.player, A = node.children.length, m = node.m, avg = Solver.avg(node);
+  const vals = s.ev(node, reach)[p], mass = s.contract(s.P, reach, p);
+  const groups = new Map();
+  for (let k = 0; k < m; k++) {
+    const w = reach[p][k] * s.weights[p][k];
+    if (w <= 1e-9) continue;
+    const key = handClass(s.combos[p][k]);
+    const g = groups.get(key) || { w: 0, st: new Array(A).fill(0), num: 0, den: 0, str: s.strength[p][k], desc: s.desc[p][k] };
+    g.w += w; g.num += reach[p][k] * vals[k]; g.den += reach[p][k] * mass[k];
+    for (let a = 0; a < A; a++) g.st[a] += avg[a * m + k] * w;
+    groups.set(key, g);
+  }
+  const rows = [...groups.entries()].sort((a, b) => b[1].str - a[1].str).map(([key, g]) => {
+    const st = g.st.map(x => x / g.w);
+    return `<tr><td class="hand">${key}</td><td>${g.w.toFixed(2)}</td><td class="barcell">${stackBar(st, colors)}</td>` +
+      st.map(f => `<td>${(100 * f).toFixed(1)}%</td>`).join("") +
+      `<td class="evgroup"><b>${(g.den > 0 ? g.num / g.den : 0).toFixed(3)}</b></td><td class="desc">${esc(g.desc)}</td></tr>`;
+  }).join("");
+  return `<div class="tablebox"><table><thead><tr><th>Hand</th><th>Combos</th><th>Mix</th>${node.labels.map(l => `<th>${esc(l)}</th>`).join("")}<th class="evgroup">EV</th><th style="text-align:left">Made hand</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function renderAll() {
+  const s = solver;
+  $("allPanel").hidden = false;
+  spots = collectSpots(s);
+  const opts = [["all", "Everyone"], ...s.names.map((nm, i) => [String(i), nm])];
+  $("whoFilter").innerHTML = opts.map(([v, l]) => `<button type="button" data-who="${v}" class="${whoFilter === v ? "on" : ""}">${esc(l)}</button>`).join("");
+  const shown = spots.map((sp, i) => [sp, i]).filter(([sp]) => sp.reached && (whoFilter === "all" || sp.node.player === +whoFilter));
+  const skipped = spots.filter(sp => !sp.reached && (whoFilter === "all" || sp.node.player === +whoFilter)).length;
+  $("allNote").textContent = `${shown.length} decision point${shown.length === 1 ? "" : "s"}, in the order they come up in the hand.` +
+    (skipped ? ` ${skipped} more ${skipped === 1 ? "is" : "are"} hidden because the equilibrium never reaches ${skipped === 1 ? "it" : "them"}.` : "") +
+    ` Click a spot to show or hide it.`;
+  const openAll = shown.length <= 10;
+  $("allBody").innerHTML = shown.map(([sp, idx], n) => {
+    const node = sp.node, p = node.player, colors = actionColors(node), m = node.m, A = node.children.length;
+    const avg = Solver.avg(node);
+    let tot = 0; const overall = new Array(A).fill(0);
+    for (let c = 0; c < m; c++) { const w = sp.reach[p][c] * s.weights[p][c]; tot += w; for (let a = 0; a < A; a++) overall[a] += avg[a * m + c] * w; }
+    const ov = overall.map(x => tot > 0 ? x / tot : 0);
+    const prev = sp.steps.slice(1).map(st => esc(st.label));
+    const line = prev.length ? `<span class="prev">${prev.join(" › ")} ›</span> ` : "";
+    return `<details class="spot"${openAll || n < 3 ? " open" : ""}>
+      <summary><span class="line">${line}<b>${esc(s.names[p])} to act</b> <span class="prev">· ${tot.toFixed(2)} combos · pot ${fmt(node.pot)}</span></span>${stackBar(ov, colors)}</summary>
+      <div class="inner">
+        <div class="toolbar">
+          <div class="legend">${node.labels.map((l, a) => `<span><span class="sw" style="background:${colors[a]}"></span>${esc(l)} <b>${(100 * ov[a]).toFixed(1)}%</b></span>`).join("")}</div>
+          <button type="button" class="link" data-spot="${idx}">Open in explorer ↑</button>
+        </div>
+        ${spotTable(s, node, sp.reach, colors)}
+      </div>
+    </details>`;
+  }).join("");
+}
+$("whoFilter").addEventListener("click", e => {
+  const b = e.target.closest("[data-who]"); if (!b) return;
+  whoFilter = b.dataset.who; renderAll();
+});
+$("allBody").addEventListener("click", e => {
+  const b = e.target.closest("[data-spot]"); if (!b) return;
+  path = spots[+b.dataset.spot].steps.slice();
+  renderNode();
+  $("nodePanel").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+});
 $("setup").addEventListener("submit", e => { e.preventDefault(); solve(); });
 
 // ======================= Node view =======================
