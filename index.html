@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>River Toy Solver</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+/* Layout: a settings column beside a results column (solver output, line breadcrumb, range grid, strategy table); stacks to one column on phones. */
+:root {
+  --bg: #f4f6f4;
+  --surface: #ffffff;
+  --sunk: #eef1ee;
+  --fg: #16201b;
+  --muted: #5a6860;
+  --line: #dbe1dc;
+  --accent: #1d6b50;
+  --accent-fg: #ffffff;
+  --err: #b42318;
+  --a-fold: #3b7bd4;
+  --a-pass: #36a066;
+  --a-agg1: #f09a8f;
+  --a-agg2: #e0635a;
+  --a-agg3: #c23631;
+  --a-agg4: #841c1c;
+  --suit-s: #1b2420;
+  --suit-h: #c92d2d;
+  --suit-d: #2c5fc6;
+  --suit-c: #24854b;
+  --card-bg: #ffffff;
+  --empty-cell: #e7ebe8;
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1311; --surface: #161d1a; --sunk: #111815; --fg: #e4ebe7; --muted: #93a39a; --line: #27322d;
+    --accent: #4cc08e; --accent-fg: #05120c; --err: #ff8a7a;
+    --a-fold: #5b97ea; --a-pass: #45b97a; --a-agg1: #f2a99f; --a-agg2: #e8736a; --a-agg3: #d24741; --a-agg4: #a82b2b;
+    --suit-s: #e4ebe7; --suit-h: #ff6b6b; --suit-d: #6c9bff; --suit-c: #4fcf83; --card-bg: #222b27; --empty-cell: #1c2420;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1311; --surface: #161d1a; --sunk: #111815; --fg: #e4ebe7; --muted: #93a39a; --line: #27322d;
+  --accent: #4cc08e; --accent-fg: #05120c; --err: #ff8a7a;
+  --a-fold: #5b97ea; --a-pass: #45b97a; --a-agg1: #f2a99f; --a-agg2: #e8736a; --a-agg3: #d24741; --a-agg4: #a82b2b;
+  --suit-s: #e4ebe7; --suit-h: #ff6b6b; --suit-d: #6c9bff; --suit-c: #4fcf83; --card-bg: #222b27; --empty-cell: #1c2420;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 17px; font-weight: 700; }
+h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-family: var(--font-body); }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px; }
+.top { display: grid; gap: 4px; }
+.top p { margin: 0; color: var(--muted); max-width: 70ch; }
+.layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 880px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+.field { display: grid; gap: 4px; }
+.field label, .lbl { font-size: 12px; font-weight: 600; color: var(--muted); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+input[type=text], input[type=number], textarea, select {
+  font: inherit; color: var(--fg); background: var(--sunk); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; min-width: 0;
+}
+textarea { font-family: var(--font-data); font-size: 13px; resize: vertical; min-height: 44px; }
+input.mono { font-family: var(--font-data); }
+input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.player { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunk); }
+.player-head { display: flex; gap: 8px; align-items: center; }
+.player-head .order { font-family: var(--font-data); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.player-head input { background: var(--surface); }
+.player textarea { background: var(--surface); }
+button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 7px 12px; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; padding: 10px 14px; }
+button.primary:disabled { opacity: 0.6; cursor: progress; }
+button.link { border: none; background: none; padding: 2px 4px; color: var(--muted); font-size: 12px; }
+button.link:hover { color: var(--fg); }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.error { color: var(--err); font-size: 13px; margin: 0; }
+details summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+.results { display: grid; gap: 16px; min-width: 0; }
+.status { font-family: var(--font-data); font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.status b { color: var(--fg); font-weight: 600; }
+.progress { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); width: 0; transition: width .15s; }
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.ev-tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--surface); display: grid; gap: 2px; }
+.ev-tile .name { font-size: 12px; font-weight: 600; color: var(--muted); }
+.ev-tile .big { font-family: var(--font-data); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ev-tile .sub { font-family: var(--font-data); font-size: 11px; color: var(--muted); }
+
+.board { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.pcard { width: 34px; height: 46px; border-radius: 5px; background: var(--card-bg); border: 1px solid var(--line); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 16px; line-height: 1; box-shadow: 0 1px 0 var(--line); }
+.pcard small { display: block; font-size: 14px; text-align: center; }
+.s-s { color: var(--suit-s); } .s-h { color: var(--suit-h); } .s-d { color: var(--suit-d); } .s-c { color: var(--suit-c); }
+
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 13px; }
+.crumbs button { padding: 3px 8px; font-size: 12px; }
+.crumbs button.here { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.crumbs .sep { color: var(--muted); }
+.nodehead { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; }
+.facts { font-family: var(--font-data); font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.facts b { color: var(--fg); font-weight: 600; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.act { display: flex; align-items: center; gap: 8px; padding: 8px 12px; }
+.act .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.act .pct { font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+.bar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; background: var(--empty-cell); }
+.bar > span { display: block; height: 100%; }
+.bar.big { height: 14px; }
+
+.node-grid { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .node-grid { grid-template-columns: minmax(0, 1fr); } }
+.grid13 { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 2px; max-width: 360px; width: 100%; }
+.cell { aspect-ratio: 1; max-width: 100%; border-radius: 2px; background: var(--empty-cell); font-size: 9px; font-family: var(--font-data); display: grid; place-items: center; color: var(--muted); position: relative; overflow: hidden; }
+.cell.on { color: #fff; font-weight: 600; text-shadow: 0 0 2px rgba(0,0,0,.6); }
+.cell .fill { position: absolute; inset: 0; display: flex; flex-direction: column-reverse; }
+.cell .fill span { display: block; width: 100%; }
+.cell .t { position: relative; }
+.cell .partial { position: absolute; inset: 0; background: var(--empty-cell); }
+
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; background: var(--sunk); }
+th:first-child, td:first-child { text-align: left; }
+td { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+td.hand { font-family: var(--font-display); font-weight: 700; font-size: 14px; }
+td.desc { font-family: var(--font-body); color: var(--muted); text-align: left; font-size: 12px; }
+td.barcell { min-width: 120px; }
+tr:last-child td { border-bottom: none; }
+.evgroup { border-left: 1px solid var(--line); }
+.toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.toggle button { border: none; border-radius: 0; padding: 4px 10px; font-size: 12px; }
+.toggle button.on { background: var(--fg); color: var(--bg); }
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rangelist { display: grid; gap: 6px; }
+.rangelist .r { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; align-items: baseline; }
+.rangelist .who { font-weight: 600; min-width: 60px; }
+.chip { font-family: var(--font-data); font-size: 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+.terminal-note { padding: 12px; border-radius: 8px; background: var(--sunk); border: 1px solid var(--line); }
+.howto { font-size: 13px; color: var(--muted); max-width: 75ch; display: grid; gap: 6px; }
+.howto p { margin: 0; }
+.howto b { color: var(--fg); }
+@media (prefers-reduced-motion: reduce) { .progress > div { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <h1>River Toy Solver</h1>
+    <p>Solve one river betting round to equilibrium (Discounted CFR, heads-up or multiway). Set the board, pot, stacks, ranges and bet sizes, then click through the game tree.</p>
+  </header>
+
+  <div class="layout">
+    <form id="setup" class="panel" autocomplete="off">
+      <div class="field">
+        <label for="preset">Load an example</label>
+        <select id="preset">
+          <option value="aaa">AAA22: KK/33 vs 88 (pot-size jam)</option>
+          <option value="aaa2">AAA22 with two bet sizes</option>
+          <option value="aaa3">AAA22 three-way</option>
+          <option value="real">K9522 with real ranges</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="board">Board</label>
+        <input id="board" type="text" class="mono" value="AsAdAh2s2d" spellcheck="false">
+        <div class="board" id="boardview" aria-hidden="true"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="pot">Pot</label><input id="pot" type="number" min="0.01" step="any" value="10"></div>
+        <div class="field"><label for="stack">Effective stack</label><input id="stack" type="number" min="0" step="any" value="10"></div>
+      </div>
+      <div class="field">
+        <span class="lbl">Players, in order of action</span>
+        <div id="players" style="display:grid;gap:8px"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <button type="button" id="addPlayer">Add player</button>
+          <span class="hint">Up to 4 players</span>
+        </div>
+        <p class="hint">Syntax: <code>KK, AKs, AKo, TT+, A9s+, 22-55, AsKd, any</code>. Add a weight with <code>KK:0.5</code>.</p>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="bets">Bet sizes (% pot)</label><input id="bets" type="text" class="mono" value="100"></div>
+        <div class="field"><label for="raises">Raise sizes (% pot)</label><input id="raises" type="text" class="mono" value="100"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="maxRaises">Raises after a bet</label><input id="maxRaises" type="number" min="0" max="4" step="1" value="1"></div>
+        <div class="field" style="align-content:end"><label class="check"><input id="allin" type="checkbox" checked> Add all-in</label></div>
+      </div>
+      <details>
+        <summary>Solver settings</summary>
+        <div class="row2" style="margin-top:8px">
+          <div class="field"><label for="iters">Max iterations</label><input id="iters" type="number" min="10" step="10" value="2000"></div>
+          <div class="field"><label for="target">Stop at (% pot)</label><input id="target" type="number" min="0" step="any" value="0.05"></div>
+        </div>
+      </details>
+      <button type="submit" class="primary" id="solveBtn">Solve</button>
+      <p class="error" id="err" hidden></p>
+    </form>
+
+    <section class="results" aria-live="polite">
+      <div class="panel" style="gap:10px">
+        <div class="progress"><div id="prog"></div></div>
+        <div class="status" id="status">Ready</div>
+        <div class="summary" id="summary"></div>
+      </div>
+
+      <div class="panel" id="nodePanel" hidden>
+        <div class="crumbs" id="crumbs"></div>
+        <div class="nodehead">
+          <h2 id="nodeTitle"></h2>
+          <div class="facts" id="facts"></div>
+        </div>
+        <div id="nodeBody" style="display:grid;gap:14px"></div>
+      </div>
+
+      <details class="panel">
+        <summary>How to read this</summary>
+        <div class="howto" style="margin-top:8px">
+          <p><b>Strategy</b> is how often each hand takes each action. Click an action to see how the next player responds.</p>
+          <p><b>EV</b> is chips won, counted from the start of the river, so it includes each player's share of the pot. Heads-up, the two EVs add up to the pot. After you put chips in, folding shows as losing them.</p>
+          <p><b>Indifference.</b> At equilibrium, a hand that mixes between actions gets the same EV from each of them. In the AAA22 game, 33 bluffs and checks at the same EV, and 88 calls and folds at the same EV.</p>
+          <p><b>Could gain</b> is how many chips a player would win by switching to the best counter-strategy. Close to zero means the solve has converged. With three or more players CFR isn't guaranteed to converge, but this number shows how close each player is.</p>
+          <p>Limits: one effective stack for everyone (no side pots), and every player uses the same bet sizes.</p>
+        </div>
+      </details>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ======================= Cards =======================
+const RANKS = "23456789TJQKA", SUITS = "cdhs", SUIT_SYM = { c: "♣", d: "♦", h: "♥", s: "♠" };
+function cardFromStr(s) {
+  const r = RANKS.indexOf((s[0] || "").toUpperCase()), su = SUITS.indexOf((s[1] || "").toLowerCase());
+  if (r < 0 || su < 0) throw new Error(`"${s}" isn't a card. Write rank then suit, like As or Td.`);
+  return r * 4 + su;
+}
+function parseCards(str) {
+  const s = str.replace(/[\s,]/g, "");
+  if (s.length % 2) throw new Error(`Couldn't read the cards "${str}". Write each card as rank then suit, like AsKd.`);
+  const out = [];
+  for (let i = 0; i < s.length; i += 2) out.push(cardFromStr(s.slice(i, i + 2)));
+  return out;
+}
+const cardRank = c => RANKS[c >> 2], cardSuit = c => SUITS[c & 3];
+
+// ======================= Hand evaluation =======================
+function eval5(cards) {
+  const ranks = cards.map(c => (c >> 2) + 2).sort((a, b) => b - a);
+  const flush = cards.every(c => (c & 3) === (cards[0] & 3));
+  const cnt = {}; ranks.forEach(r => cnt[r] = (cnt[r] || 0) + 1);
+  const groups = Object.entries(cnt).map(([r, c]) => [+r, c]).sort((a, b) => b[1] - a[1] || b[0] - a[0]);
+  const uniq = [...new Set(ranks)];
+  let straight = 0;
+  if (uniq.length === 5) {
+    if (uniq[0] - uniq[4] === 4) straight = uniq[0];
+    else if (uniq.join() === "14,5,4,3,2") straight = 5;
+  }
+  const g = groups.map(x => x[0]);
+  if (straight && flush) return [8, straight];
+  if (groups[0][1] === 4) return [7, g[0], g[1]];
+  if (groups[0][1] === 3 && groups[1][1] === 2) return [6, g[0], g[1]];
+  if (flush) return [5, ...ranks];
+  if (straight) return [4, straight];
+  if (groups[0][1] === 3) return [3, ...g];
+  if (groups[0][1] === 2 && groups[1][1] === 2) return [2, ...g];
+  if (groups[0][1] === 2) return [1, ...g];
+  return [0, ...ranks];
+}
+function scoreOf(t) { let s = 0; for (let i = 0; i < 6; i++) s = s * 15 + (t[i] || 0); return s; }
+function eval7(cards) {
+  let best = null, bs = -1;
+  for (let a = 0; a < 7; a++) for (let b = a + 1; b < 7; b++) {
+    const five = cards.filter((_, i) => i !== a && i !== b);
+    const t = eval5(five), s = scoreOf(t);
+    if (s > bs) { bs = s; best = t; }
+  }
+  return { score: bs, tuple: best };
+}
+const CATS = ["High card", "Pair", "Two pair", "Trips", "Straight", "Flush", "Full house", "Quads", "Straight flush"];
+function describe(t) {
+  const r = v => RANKS[v - 2];
+  if (t[0] === 6) return `Full house, ${r(t[1])}${r(t[1])}${r(t[1])}${r(t[2])}${r(t[2])}`;
+  if (t[0] === 7) return `Quad ${r(t[1])}s, ${r(t[2])} kicker`;
+  if (t[0] === 4 || t[0] === 8) return `${CATS[t[0]]}, ${r(t[1])} high`;
+  return `${CATS[t[0]]}, ${t.slice(1).map(r).join("")}`;
+}
+
+// ======================= Ranges =======================
+const sortPair = (a, b) => a < b ? [a, b] : [b, a];
+function pairCombos(r) { const o = []; for (let s1 = 0; s1 < 4; s1++) for (let s2 = s1 + 1; s2 < 4; s2++) o.push([r * 4 + s1, r * 4 + s2]); return o; }
+function suitedCombos(h, l) { const o = []; for (let s = 0; s < 4; s++) o.push(sortPair(h * 4 + s, l * 4 + s)); return o; }
+function offCombos(h, l) { const o = []; for (let s1 = 0; s1 < 4; s1++) for (let s2 = 0; s2 < 4; s2++) if (s1 !== s2) o.push(sortPair(h * 4 + s1, l * 4 + s2)); return o; }
+function classCombos(h, l, k) { if (h === l) return pairCombos(h); if (k === "s") return suitedCombos(h, l); if (k === "o") return offCombos(h, l); return [...suitedCombos(h, l), ...offCombos(h, l)]; }
+function parseClass(t) {
+  const bad = () => new Error(`"${t}" isn't a hand. Try KK, AKs, AKo or AK.`);
+  if (t.length < 2 || t.length > 3) throw bad();
+  const a = RANKS.indexOf(t[0].toUpperCase()), b = RANKS.indexOf(t[1].toUpperCase());
+  const k = (t[2] || "").toLowerCase();
+  if (a < 0 || b < 0 || !["", "s", "o"].includes(k) || (a === b && k)) throw bad();
+  return [Math.max(a, b), Math.min(a, b), k];
+}
+function expandToken(tok) {
+  const low = tok.toLowerCase();
+  if (["any", "random", "*", "100%"].includes(low)) { const o = []; for (let a = 0; a < 52; a++) for (let b = a + 1; b < 52; b++) o.push([a, b]); return o; }
+  if (tok.length === 4 && SUITS.includes(tok[1].toLowerCase()) && SUITS.includes(tok[3].toLowerCase())) {
+    const a = cardFromStr(tok.slice(0, 2)), b = cardFromStr(tok.slice(2));
+    if (a === b) throw new Error(`"${tok}" uses the same card twice.`);
+    return [sortPair(a, b)];
+  }
+  if (tok.includes("-")) {
+    const [x, y] = tok.split("-");
+    const [h1, l1, k1] = parseClass(x), [h2, l2, k2] = parseClass(y);
+    if (k1 !== k2) throw new Error(`Both ends of "${tok}" need the same suitedness.`);
+    const o = [];
+    if (h1 === l1 && h2 === l2) for (let r = Math.min(h1, h2); r <= Math.max(h1, h2); r++) o.push(...pairCombos(r));
+    else if (h1 === h2) for (let r = Math.min(l1, l2); r <= Math.max(l1, l2); r++) o.push(...classCombos(h1, r, k1));
+    else throw new Error(`Couldn't read the range "${tok}". Try 22-55 or A2s-A5s.`);
+    return o;
+  }
+  if (tok.endsWith("+")) {
+    const [h, l, k] = parseClass(tok.slice(0, -1)), o = [];
+    if (h === l) for (let r = h; r < 13; r++) o.push(...pairCombos(r));
+    else for (let r = l; r < h; r++) o.push(...classCombos(h, r, k));
+    return o;
+  }
+  const [h, l, k] = parseClass(tok);
+  return classCombos(h, l, k);
+}
+function parseRange(text, board, who) {
+  const map = new Map(), bset = new Set(board);
+  for (let raw of text.replace(/\s/g, "").split(",")) {
+    if (!raw) continue;
+    let w = 1;
+    if (raw.includes(":")) { const [a, b] = raw.split(":"); raw = a; w = parseFloat(b); if (!(w >= 0)) throw new Error(`Bad weight in "${a}:${b}". Use a number like KK:0.5.`); }
+    for (const c of expandToken(raw)) {
+      if (bset.has(c[0]) || bset.has(c[1])) continue;
+      map.set(c[0] * 52 + c[1], { c, w });
+    }
+  }
+  for (const [k, v] of map) if (v.w <= 0) map.delete(k);
+  if (!map.size) throw new Error(`${who}'s range has no hands left on this board.`);
+  return [...map.values()].sort((a, b) => a.c[0] - b.c[0] || a.c[1] - b.c[1]);
+}
+function handClass(c) {
+  const ra = c[0] >> 2, rb = c[1] >> 2, hi = Math.max(ra, rb), lo = Math.min(ra, rb);
+  if (hi === lo) return RANKS[hi] + RANKS[hi];
+  return RANKS[hi] + RANKS[lo] + ((c[0] & 3) === (c[1] & 3) ? "s" : "o");
+}
+
+// ======================= Game tree =======================
+const fmt = x => (Math.round(x * 100) / 100).toString();
+function buildTree(cfg) {
+  const n = cfg.n, S = cfg.stack, eps = 1e-9;
+  let count = 0;
+  function rec(contribs, active, acted, nxt, nraises) {
+    if (++count > 200000) throw new Error("The game tree is too big. Use fewer bet sizes or fewer raises.");
+    const node = { terminal: false, labels: [], kinds: [], amounts: [], children: [], contribs, active, pot: cfg.pot + contribs.reduce((a, b) => a + b, 0) };
+    if (active.filter(Boolean).length === 1) { node.terminal = true; node.kind = "fold"; return node; }
+    const bet = Math.max(...contribs);
+    const pending = [];
+    for (let i = 0; i < n; i++) if (active[i] && contribs[i] < S - eps && (!acted[i] || contribs[i] < bet - eps)) pending.push(i);
+    if (!pending.length) { node.terminal = true; node.kind = "showdown"; return node; }
+    let p = 0;
+    for (let k = 0; k < n; k++) { const q = (nxt + k) % n; if (pending.includes(q)) { p = q; break; } }
+    node.player = p;
+    const toCall = bet - contribs[p], nx = (p + 1) % n;
+    const add = (label, kind, amt, child) => { node.labels.push(label); node.kinds.push(kind); node.amounts.push(amt); node.children.push(child); };
+    const levelsFrom = base => {
+      const lv = [];
+      for (let x of base) { x = Math.min(x, S); if (x > bet + eps && lv.every(y => Math.abs(x - y) > 1e-6)) lv.push(x); }
+      if (cfg.allin && S > bet + eps && lv.every(y => Math.abs(S - y) > 1e-6)) lv.push(S);
+      return lv.sort((a, b) => a - b);
+    };
+    if (toCall <= eps) {
+      const a2 = acted.slice(); a2[p] = true;
+      add("Check", "check", 0, rec(contribs, active, a2, nx, nraises));
+      if (bet <= eps) {
+        for (const lv of levelsFrom(cfg.bets.map(b => b / 100 * node.pot))) {
+          const c2 = contribs.slice(); c2[p] = lv;
+          const ac = new Array(n).fill(false); ac[p] = true;
+          const allin = lv >= S - eps;
+          add(`${allin ? "All-in" : "Bet"} ${fmt(lv)}`, allin ? "allin" : "bet", lv, rec(c2, active, ac, nx, nraises));
+        }
+      }
+    } else {
+      const act2 = active.slice(); act2[p] = false;
+      const a2 = acted.slice(); a2[p] = true;
+      add("Fold", "fold", 0, rec(contribs, act2, a2, nx, nraises));
+      const c2 = contribs.slice(); c2[p] = Math.min(bet, S);
+      add(`Call ${fmt(c2[p] - contribs[p])}`, "call", c2[p], rec(c2, active, a2, nx, nraises));
+      if (nraises < cfg.maxRaises && bet < S - eps) {
+        const potAfter = node.pot + toCall;
+        for (const lv of levelsFrom(cfg.raises.map(r => bet + r / 100 * potAfter))) {
+          const c3 = contribs.slice(); c3[p] = lv;
+          const ac = new Array(n).fill(false); ac[p] = true;
+          const allin = lv >= S - eps;
+          add(allin ? `All-in ${fmt(lv)}` : `Raise to ${fmt(lv)}`, allin ? "allin" : "raise", lv, rec(c3, active, ac, nx, nraises + 1));
+        }
+      }
+    }
+    return node;
+  }
+  const z = new Array(cfg.n).fill(0);
+  const root = rec(z, new Array(cfg.n).fill(true), new Array(cfg.n).fill(false), 0, 0);
+  return { root, count };
+}
+
+// ======================= Solver =======================
+class Solver {
+  constructor(board, ranges, cfg, names) {
+    this.board = board; this.cfg = cfg; this.n = ranges.length; this.names = names;
+    const n = this.n;
+    this.combos = ranges.map(r => r.map(x => x.c));
+    this.weights = ranges.map(r => Float64Array.from(r.map(x => x.w)));
+    const ev = this.combos.map(cs => cs.map(c => eval7([...c, ...board])));
+    const uniq = [...new Set(ev.flat().map(e => e.score))].sort((a, b) => a - b);
+    const idx = new Map(uniq.map((s, i) => [s, i]));
+    this.strength = ev.map(row => Int32Array.from(row.map(e => idx.get(e.score))));
+    this.desc = ev.map(row => row.map(e => describe(e.tuple)));
+    this.shape = this.combos.map(c => c.length);
+    this.size = this.shape.reduce((a, b) => a * b, 1);
+    if (this.size > 4e6) throw new Error(`These ranges make ${this.size.toLocaleString()} hand matchups, which is too many for the browser. Narrow the ranges.`);
+    // prior tensor: product of weights, zero where cards collide
+    const P = new Float64Array(this.size), id = new Int32Array(n);
+    for (let f = 0; f < this.size; f++) {
+      let w = 1, ok = true;
+      for (let i = 0; i < n && ok; i++) {
+        const ci = this.combos[i][id[i]];
+        w *= this.weights[i][id[i]];
+        for (let j = 0; j < i; j++) {
+          const cj = this.combos[j][id[j]];
+          if (ci[0] === cj[0] || ci[0] === cj[1] || ci[1] === cj[0] || ci[1] === cj[1]) { ok = false; break; }
+        }
+      }
+      P[f] = ok ? w : 0;
+      for (let d = n - 1; d >= 0; d--) { if (++id[d] < this.shape[d]) break; id[d] = 0; }
+    }
+    this.P = P; this.Z = P.reduce((a, b) => a + b, 0);
+    if (this.Z <= 0) throw new Error("No deal is possible: the ranges block each other completely.");
+    this.shareCache = new Map();
+    const t = buildTree(cfg);
+    this.root = t.root;
+    this.stats = { decisions: 0, terminals: 0 };
+    const init = node => {
+      if (node.terminal) { this.stats.terminals++; return; }
+      this.stats.decisions++;
+      node.m = this.shape[node.player];
+      const A = node.children.length;
+      node.regret = new Float64Array(A * node.m);
+      node.ssum = new Float64Array(A * node.m);
+      node.children.forEach(init);
+    };
+    init(this.root);
+  }
+  contract(T, reach, i) {
+    let cur = T, sh = this.shape.slice();
+    for (let j = this.n - 1; j >= 0; j--) {
+      if (j === i) continue;
+      const m = sh[j];
+      let outer = 1, inner = 1;
+      for (let k = 0; k < j; k++) outer *= sh[k];
+      for (let k = j + 1; k < sh.length; k++) inner *= sh[k];
+      const out = new Float64Array(outer * inner), v = reach[j];
+      for (let o = 0; o < outer; o++) {
+        const ob = o * inner;
+        for (let c = 0; c < m; c++) {
+          const vc = v[c]; if (vc === 0) continue;
+          const base = (o * m + c) * inner;
+          for (let k = 0; k < inner; k++) out[ob + k] += cur[base + k] * vc;
+        }
+      }
+      cur = out; sh.splice(j, 1);
+    }
+    return cur;
+  }
+  shares(active) {
+    const key = active.join();
+    if (!this.shareCache.has(key)) {
+      const n = this.n, alive = [], out = [];
+      for (let i = 0; i < n; i++) { if (active[i]) { alive.push(i); out.push(new Float64Array(this.size)); } else out.push(null); }
+      const id = new Int32Array(n);
+      for (let f = 0; f < this.size; f++) {
+        const p = this.P[f];
+        if (p !== 0) {
+          let best = -1, cnt = 0;
+          for (const i of alive) { const s = this.strength[i][id[i]]; if (s > best) { best = s; cnt = 1; } else if (s === best) cnt++; }
+          for (const i of alive) if (this.strength[i][id[i]] === best) out[i][f] = p / cnt;
+        }
+        for (let d = n - 1; d >= 0; d--) { if (++id[d] < this.shape[d]) break; id[d] = 0; }
+      }
+      this.shareCache.set(key, out);
+    }
+    return this.shareCache.get(key);
+  }
+  terminalValue(node, reach, i) {
+    const mass = this.contract(this.P, reach, i), c = node.contribs[i];
+    const out = new Float64Array(mass.length);
+    if (node.kind === "fold") {
+      const u = (node.active[i] ? node.pot : 0) - c;
+      for (let k = 0; k < out.length; k++) out[k] = u * mass[k];
+    } else {
+      const sh = this.shares(node.active)[i];
+      if (!sh) { for (let k = 0; k < out.length; k++) out[k] = -c * mass[k]; }
+      else {
+        const win = this.contract(sh, reach, i);
+        for (let k = 0; k < out.length; k++) out[k] = node.pot * win[k] - c * mass[k];
+      }
+    }
+    return out;
+  }
+  static regretMatch(node) {
+    const A = node.children.length, m = node.m, R = node.regret, out = new Float64Array(A * m);
+    for (let c = 0; c < m; c++) {
+      let s = 0;
+      for (let a = 0; a < A; a++) { const v = R[a * m + c]; if (v > 0) s += v; }
+      for (let a = 0; a < A; a++) out[a * m + c] = s > 0 ? Math.max(R[a * m + c], 0) / s : 1 / A;
+    }
+    return out;
+  }
+  static avg(node) {
+    const A = node.children.length, m = node.m, S = node.ssum, out = new Float64Array(A * m);
+    for (let c = 0; c < m; c++) {
+      let s = 0;
+      for (let a = 0; a < A; a++) s += S[a * m + c];
+      for (let a = 0; a < A; a++) out[a * m + c] = s > 0 ? S[a * m + c] / s : 1 / A;
+    }
+    return out;
+  }
+  static scaled(r, strat, a, m) { const o = new Float64Array(m); for (let c = 0; c < m; c++) o[c] = r[c] * strat[a * m + c]; return o; }
+  cfr(node, reach, t, i) {
+    if (node.terminal) return this.terminalValue(node, reach, i);
+    const p = node.player, A = node.children.length, m = node.m;
+    const sigma = Solver.regretMatch(node);
+    if (p !== i) {
+      const total = new Float64Array(this.shape[i]);
+      for (let a = 0; a < A; a++) {
+        const r2 = reach.slice(); r2[p] = Solver.scaled(reach[p], sigma, a, m);
+        const v = this.cfr(node.children[a], r2, t, i);
+        for (let k = 0; k < total.length; k++) total[k] += v[k];
+      }
+      return total;
+    }
+    const vals = node.children.map(ch => this.cfr(ch, reach, t, i));
+    const value = new Float64Array(m);
+    for (let a = 0; a < A; a++) for (let c = 0; c < m; c++) value[c] += sigma[a * m + c] * vals[a][c];
+    const t15 = Math.pow(t, 1.5), posW = t15 / (t15 + 1), sw = Math.pow(t / (t + 1), 2);
+    const R = node.regret, SS = node.ssum, rp = reach[p];
+    for (let a = 0; a < A; a++) for (let c = 0; c < m; c++) {
+      const k = a * m + c;
+      R[k] = (R[k] > 0 ? R[k] * posW : R[k] * 0.5) + vals[a][c] - value[c];
+      SS[k] = SS[k] * sw + rp[c] * sigma[k];
+    }
+    return value;
+  }
+  ev(node, reach) {
+    if (node.terminal) return reach.map((_, i) => this.terminalValue(node, reach, i));
+    const p = node.player, A = node.children.length, m = node.m, avg = Solver.avg(node);
+    const tot = this.shape.map(s => new Float64Array(s));
+    for (let a = 0; a < A; a++) {
+      const r2 = reach.slice(); r2[p] = Solver.scaled(reach[p], avg, a, m);
+      const v = this.ev(node.children[a], r2);
+      for (let j = 0; j < this.n; j++) {
+        if (j === p) for (let c = 0; c < m; c++) tot[j][c] += avg[a * m + c] * v[j][c];
+        else for (let c = 0; c < tot[j].length; c++) tot[j][c] += v[j][c];
+      }
+    }
+    return tot;
+  }
+  br(node, reach, i) {
+    if (node.terminal) return this.terminalValue(node, reach, i);
+    const p = node.player, A = node.children.length, m = node.m;
+    if (p === i) {
+      const vs = node.children.map(ch => this.br(ch, reach, i)), out = vs[0].slice();
+      for (let a = 1; a < A; a++) for (let c = 0; c < m; c++) if (vs[a][c] > out[c]) out[c] = vs[a][c];
+      return out;
+    }
+    const avg = Solver.avg(node), total = new Float64Array(this.shape[i]);
+    for (let a = 0; a < A; a++) {
+      const r2 = reach.slice(); r2[p] = Solver.scaled(reach[p], avg, a, m);
+      const v = this.br(node.children[a], r2, i);
+      for (let k = 0; k < total.length; k++) total[k] += v[k];
+    }
+    return total;
+  }
+  rootReach() { return this.shape.map(s => new Float64Array(s).fill(1)); }
+  sum(v) { let s = 0; for (const x of v) s += x; return s; }
+  exploitability() {
+    const v = this.ev(this.root, this.rootReach());
+    const evs = v.map(x => this.sum(x) / this.Z);
+    const gaps = evs.map((e, i) => this.sum(this.br(this.root, this.rootReach(), i)) / this.Z - e);
+    return { evs, gaps, pct: 100 * gaps.reduce((a, b) => a + b, 0) / this.cfg.pot };
+  }
+}
+
+// ======================= UI state =======================
+const $ = id => document.getElementById(id);
+const PRESETS = {
+  aaa: { board: "AsAdAh2s2d", pot: 10, stack: 10, players: [["OOP", "KK,33"], ["IP", "88"]], bets: "100", raises: "100", maxRaises: 1, allin: true },
+  aaa2: { board: "AsAdAh2s2d", pot: 10, stack: 20, players: [["OOP", "KK,33"], ["IP", "88"]], bets: "50,100", raises: "100", maxRaises: 1, allin: true },
+  aaa3: { board: "AsAdAh2s2d", pot: 10, stack: 10, players: [["P1", "KK,33"], ["P2", "88"], ["P3", "QQ,44"]], bets: "50,100", raises: "100", maxRaises: 1, allin: true },
+  real: { board: "Ks9d5c2h2s", pot: 10, stack: 20, players: [["OOP", "22+,A2s+,KTo+,QJs,T9s,87s"], ["IP", "33+,ATs+,KJo+,K9s"]], bets: "50,100", raises: "100", maxRaises: 1, allin: true },
+};
+let solver = null, path = [], view = "class", runToken = 0;
+
+function cardHTML(c) {
+  const s = cardSuit(c);
+  return `<span class="s-${s}">${cardRank(c)}${SUIT_SYM[s]}</span>`;
+}
+function renderBoardPreview() {
+  const el = $("boardview");
+  try {
+    const cards = parseCards($("board").value);
+    el.innerHTML = cards.map(c => `<div class="pcard s-${cardSuit(c)}"><span>${cardRank(c)}<small>${SUIT_SYM[cardSuit(c)]}</small></span></div>`).join("");
+  } catch { el.innerHTML = ""; }
+}
+function playerRow(name, range, i, total) {
+  const order = i === 0 ? "acts first" : `acts ${["", "2nd", "3rd", "4th"][i]}`;
+  return `<div class="player">
+    <div class="player-head">
+      <input type="text" id="name-${i}" value="${name}" aria-label="Player ${i + 1} name">
+      <span class="order">${order}</span>
+      ${total > 2 ? `<button type="button" class="link" data-remove="${i}" aria-label="Remove player ${i + 1}">Remove</button>` : ""}
+    </div>
+    <textarea id="range-${i}" rows="2" spellcheck="false" aria-label="Player ${i + 1} range">${range}</textarea>
+  </div>`;
+}
+function readPlayers() {
+  const out = [];
+  for (let i = 0; $(`name-${i}`); i++) out.push([$(`name-${i}`).value, $(`range-${i}`).value]);
+  return out;
+}
+function renderPlayers(list) {
+  $("players").innerHTML = list.map((p, i) => playerRow(p[0], p[1], i, list.length)).join("");
+  $("addPlayer").disabled = list.length >= 4;
+}
+$("players").addEventListener("click", e => {
+  const r = e.target.closest("[data-remove]");
+  if (!r) return;
+  const list = readPlayers(); list.splice(+r.dataset.remove, 1);
+  renderPlayers(list);
+});
+$("addPlayer").addEventListener("click", () => {
+  const list = readPlayers();
+  if (list.length >= 4) return;
+  if (list.length === 2 && list[0][0] === "OOP" && list[1][0] === "IP") { list[0][0] = "P1"; list[1][0] = "P2"; }
+  list.push([`P${list.length + 1}`, "QQ"]);
+  renderPlayers(list);
+});
+function loadPreset(key) {
+  const p = PRESETS[key];
+  $("board").value = p.board; $("pot").value = p.pot; $("stack").value = p.stack;
+  $("bets").value = p.bets; $("raises").value = p.raises; $("maxRaises").value = p.maxRaises; $("allin").checked = p.allin;
+  renderPlayers(p.players.map(x => x.slice()));
+  renderBoardPreview();
+}
+$("preset").addEventListener("change", () => { loadPreset($("preset").value); solve(); });
+$("board").addEventListener("input", renderBoardPreview);
+
+function parsePcts(s, what) {
+  const out = s.split(/[\s,]+/).filter(Boolean).map(x => parseFloat(x.replace("%", "")));
+  if (out.some(x => !(x > 0))) throw new Error(`${what} must be positive percentages, like 50,100.`);
+  return out;
+}
+function showError(msg) { const e = $("err"); e.textContent = msg; e.hidden = !msg; }
+
+async function solve() {
+  const token = ++runToken;
+  showError("");
+  let s;
+  try {
+    const board = parseCards($("board").value);
+    if (board.length !== 5) throw new Error("The board needs exactly 5 cards for a river solve.");
+    if (new Set(board).size !== 5) throw new Error("The board has the same card twice.");
+    const pot = parseFloat($("pot").value), stack = parseFloat($("stack").value);
+    if (!(pot > 0)) throw new Error("The pot must be more than 0.");
+    if (!(stack >= 0)) throw new Error("The stack can't be negative.");
+    const players = readPlayers();
+    const names = players.map((p, i) => p[0].trim() || `P${i + 1}`);
+    const ranges = players.map((p, i) => parseRange(p[1], board, names[i]));
+    const cfg = {
+      n: players.length, pot, stack,
+      bets: parsePcts($("bets").value, "Bet sizes"),
+      raises: $("raises").value.trim() ? parsePcts($("raises").value, "Raise sizes") : [],
+      maxRaises: Math.max(0, parseInt($("maxRaises").value) || 0),
+      allin: $("allin").checked,
+    };
+    s = new Solver(board, ranges, cfg, names);
+  } catch (e) { showError(e.message); return; }
+
+  const iters = Math.max(1, parseInt($("iters").value) || 2000);
+  const target = Math.max(0, parseFloat($("target").value) || 0);
+  const btn = $("solveBtn");
+  btn.disabled = true; btn.textContent = "Solving…";
+  $("summary").innerHTML = "";
+  const t0 = performance.now();
+  let res = null, t = 0;
+  const checkEvery = 25;
+  while (t < iters) {
+    const sliceEnd = performance.now() + 40;
+    while (t < iters && performance.now() < sliceEnd) {
+      t++;
+      for (let i = 0; i < s.n; i++) s.cfr(s.root, s.rootReach(), t, i);
+      if (t % checkEvery === 0) { res = s.exploitability(); if (res.pct <= target) break; }
+    }
+    if (token !== runToken) return;
+    $("prog").style.width = `${100 * t / iters}%`;
+    $("status").innerHTML = `<span>Iteration <b>${t}</b></span>` + (res ? `<span>exploitability <b>${res.pct.toFixed(3)}%</b> of pot</span>` : "");
+    if (res && res.pct <= target) break;
+    await new Promise(r => setTimeout(r, 0));
+    if (token !== runToken) return;
+  }
+  res = s.exploitability();
+  const secs = (performance.now() - t0) / 1000;
+  $("prog").style.width = "100%";
+  btn.disabled = false; btn.textContent = "Solve";
+  solver = s;
+  s.iterations = t;
+  $("status").innerHTML =
+    `<span>Solved in <b>${secs.toFixed(1)}s</b></span><span><b>${t}</b> iterations</span>` +
+    `<span>exploitability <b>${res.pct.toFixed(3)}%</b> of pot</span>` +
+    `<span><b>${s.stats.decisions}</b> decision points</span>`;
+  $("summary").innerHTML = s.names.map((nm, i) => `<div class="ev-tile">
+      <span class="name">${esc(nm)} EV</span>
+      <span class="big">${res.evs[i].toFixed(3)}</span>
+      <span class="sub">${(100 * res.evs[i] / s.cfg.pot).toFixed(1)}% of pot · could gain ${res.gaps[i].toFixed(4)}</span>
+    </div>`).join("");
+  path = [{ node: s.root, reach: s.rootReach(), label: "Start" }];
+  renderNode();
+}
+$("setup").addEventListener("submit", e => { e.preventDefault(); solve(); });
+
+// ======================= Node view =======================
+function esc(s) { return String(s).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch])); }
+function actionColors(node) {
+  const agg = node.kinds.map((k, i) => ["bet", "raise", "allin"].includes(k) ? i : -1).filter(i => i >= 0);
+  const shades = ["--a-agg1", "--a-agg2", "--a-agg3", "--a-agg4"];
+  return node.kinds.map((k, i) => {
+    if (k === "fold") return "var(--a-fold)";
+    if (k === "check" || k === "call") return "var(--a-pass)";
+    const rank = agg.indexOf(i), off = Math.max(0, 4 - agg.length);
+    const pick = agg.length === 1 ? 2 : Math.min(3, rank + off);
+    return `var(${shades[pick]})`;
+  });
+}
+function stackBar(fracs, colors, big) {
+  return `<div class="bar${big ? " big" : ""}">` + fracs.map((f, a) => f > 0.0005 ? `<span style="width:${(100 * f).toFixed(2)}%;background:${colors[a]}"></span>` : "").join("") + `</div>`;
+}
+function comboHTML(c) { return cardHTML(c[1]) + cardHTML(c[0]); }
+
+function rangeSummary(s, reach, i) {
+  const groups = new Map();
+  s.combos[i].forEach((c, k) => {
+    const w = reach[i][k] * s.weights[i][k];
+    if (w < 1e-6) return;
+    const key = handClass(c);
+    const g = groups.get(key) || { w: 0, str: s.strength[i][k] };
+    g.w += w; groups.set(key, g);
+  });
+  return [...groups.entries()].sort((a, b) => b[1].str - a[1].str || b[1].w - a[1].w);
+}
+
+function renderNode() {
+  const s = solver, here = path[path.length - 1], node = here.node, reach = here.reach, n = s.n;
+  $("nodePanel").hidden = false;
+  $("crumbs").innerHTML = path.map((st, i) =>
+    `${i ? '<span class="sep">›</span>' : ""}<button type="button" data-step="${i}" class="${i === path.length - 1 ? "here" : ""}">${esc(st.label)}</button>`).join("");
+
+  const behind = s.names.map((nm, i) => node.active[i] ? `${esc(nm)} <b>${fmt(s.cfg.stack - node.contribs[i])}</b>` : null).filter(Boolean);
+  $("facts").innerHTML = `<span>Board ${s.board.map(cardHTML).join("")}</span><span>Pot <b>${fmt(node.pot)}</b></span><span>Behind: ${behind.join(", ")}</span>`;
+
+  const vals = s.ev(node, reach);
+  const mass = s.shape.map((_, i) => s.contract(s.P, reach, i));
+  const nodeEV = i => { let a = 0, b = 0; for (let c = 0; c < s.shape[i]; c++) { a += reach[i][c] * vals[i][c]; b += reach[i][c] * mass[i][c]; } return b > 0 ? a / b : 0; };
+
+  const rangesHTML = `<div class="rangelist"><h3>Ranges at this point</h3>` + s.names.map((nm, i) => {
+    if (!node.active[i]) return `<div class="r"><span class="who">${esc(nm)}</span><span class="hint">folded</span></div>`;
+    const g = rangeSummary(s, reach, i);
+    const tot = g.reduce((a, x) => a + x[1].w, 0);
+    return `<div class="r"><span class="who">${esc(nm)}</span><span class="hint">${tot.toFixed(2)} combos · EV ${nodeEV(i).toFixed(3)}</span>` +
+      g.slice(0, 40).map(([k, x]) => `<span class="chip">${k} ${x.w.toFixed(2)}</span>`).join("") + (g.length > 40 ? `<span class="hint">+${g.length - 40} more</span>` : "") + `</div>`;
+  }).join("") + `</div>`;
+
+  if (node.terminal) {
+    let msg;
+    if (node.kind === "fold") msg = `Everyone else folded. ${esc(s.names[node.active.indexOf(true)])} wins the ${fmt(node.pot)} pot.`;
+    else msg = `Showdown between ${s.names.filter((_, i) => node.active[i]).map(esc).join(" and ")} for a ${fmt(node.pot)} pot.`;
+    $("nodeTitle").textContent = node.kind === "fold" ? "Hand over" : "Showdown";
+    $("nodeBody").innerHTML = `<div class="terminal-note">${msg}</div>` + rangesHTML;
+    return;
+  }
+
+  const p = node.player, A = node.children.length, m = node.m, avg = Solver.avg(node), colors = actionColors(node);
+  $("nodeTitle").textContent = `${s.names[p]} to act`;
+  const here_c = new Float64Array(m); let total = 0;
+  for (let c = 0; c < m; c++) { here_c[c] = reach[p][c] * s.weights[p][c]; total += here_c[c]; }
+  const overall = new Array(A).fill(0);
+  if (total > 0) for (let a = 0; a < A; a++) { let x = 0; for (let c = 0; c < m; c++) x += avg[a * m + c] * here_c[c]; overall[a] = x / total; }
+  const actEV = node.children.map(ch => s.ev(ch, reach)[p]);
+
+  // group stats
+  const stat = keys => {
+    let w = 0, num = 0, den = 0;
+    const st = new Array(A).fill(0), aev = new Array(A).fill(0);
+    for (const k of keys) {
+      w += here_c[k];
+      for (let a = 0; a < A; a++) { st[a] += avg[a * m + k] * here_c[k]; aev[a] += reach[p][k] * actEV[a][k]; }
+      num += reach[p][k] * vals[p][k]; den += reach[p][k] * mass[p][k];
+    }
+    return { w, strat: st.map(x => w > 0 ? x / w : 0), ev: den > 0 ? num / den : 0, aev: aev.map(x => den > 0 ? x / den : 0) };
+  };
+  const byClass = new Map();
+  s.combos[p].forEach((c, k) => { const key = handClass(c); if (!byClass.has(key)) byClass.set(key, []); byClass.get(key).push(k); });
+
+  // grid
+  let grid = "";
+  for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++) {
+    const ri = 12 - i, rj = 12 - j;
+    const key = i === j ? RANKS[ri] + RANKS[ri] : i < j ? RANKS[ri] + RANKS[rj] + "s" : RANKS[rj] + RANKS[ri] + "o";
+    const keys = byClass.get(key);
+    const st = keys ? stat(keys) : null;
+    if (!st || st.w < 1e-6) { grid += `<div class="cell" title="${key}: not in range here"><span class="t">${key}</span></div>`; continue; }
+    const full = i === j ? 6 : i < j ? 4 : 12;
+    const fill = Math.min(1, st.w / full);
+    const tip = `${key}: ${st.w.toFixed(2)} combos\n` + node.labels.map((l, a) => `${l}: ${(100 * st.strat[a]).toFixed(1)}%`).join("\n");
+    grid += `<div class="cell on" title="${esc(tip)}"><div class="fill">` +
+      st.strat.map((f, a) => `<span style="height:${(100 * f).toFixed(2)}%;background:${colors[a]}"></span>`).join("") +
+      `</div><div class="partial" style="top:0;bottom:auto;height:${(100 * (1 - fill)).toFixed(1)}%"></div><span class="t">${key}</span></div>`;
+  }
+
+  // table rows
+  const order = [...Array(m).keys()].filter(k => here_c[k] > 1e-9).sort((a, b) => s.strength[p][b] - s.strength[p][a]);
+  const rows = [];
+  if (view === "class") {
+    const seen = new Set();
+    for (const k of order) {
+      const key = handClass(s.combos[p][k]);
+      if (seen.has(key)) continue; seen.add(key);
+      rows.push({ label: key, keys: byClass.get(key).filter(x => here_c[x] > 1e-9), desc: s.desc[p][k] });
+    }
+  } else for (const k of order) rows.push({ label: comboHTML(s.combos[p][k]), keys: [k], desc: s.desc[p][k] });
+
+  const head = `<tr><th>Hand</th><th>Combos</th><th>Mix</th>${node.labels.map(l => `<th>${esc(l)}</th>`).join("")}<th class="evgroup">EV</th>${node.labels.map(l => `<th>EV ${esc(l)}</th>`).join("")}<th style="text-align:left">Made hand</th></tr>`;
+  const body = rows.map(r => {
+    const st = stat(r.keys);
+    return `<tr><td class="hand">${r.label}</td><td>${st.w.toFixed(2)}</td><td class="barcell">${stackBar(st.strat, colors)}</td>` +
+      st.strat.map(f => `<td>${(100 * f).toFixed(1)}%</td>`).join("") +
+      `<td class="evgroup"><b>${st.ev.toFixed(3)}</b></td>` + st.aev.map(x => `<td>${x.toFixed(3)}</td>`).join("") +
+      `<td class="desc">${esc(r.desc)}</td></tr>`;
+  }).join("");
+
+  $("nodeBody").innerHTML = `
+    <div style="display:grid;gap:8px">
+      <h3>Choose an action to follow the line</h3>
+      <div class="actions">${node.labels.map((l, a) => `<button type="button" class="act" data-act="${a}"><span class="sw" style="background:${colors[a]}"></span>${esc(l)}<span class="pct">${(100 * overall[a]).toFixed(1)}%</span></button>`).join("")}</div>
+      ${stackBar(overall, colors, true)}
+    </div>
+    <div class="node-grid">
+      <div style="display:grid;gap:8px"><h3>${esc(s.names[p])} strategy by hand</h3><div class="grid13">${grid}</div><p class="hint">Cell color shows the action mix. A shorter fill means fewer combos are left in that hand.</p></div>
+      ${rangesHTML}
+    </div>
+    <div style="display:grid;gap:8px">
+      <div class="toolbar"><h3>Strategy and EV per hand</h3>
+        <div class="toggle" role="group" aria-label="Group rows by"><button type="button" data-view="class" class="${view === "class" ? "on" : ""}">Hands</button><button type="button" data-view="combo" class="${view === "combo" ? "on" : ""}">Combos</button></div>
+      </div>
+      <div class="tablebox"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>
+    </div>`;
+}
+$("crumbs").addEventListener("click", e => {
+  const b = e.target.closest("[data-step]"); if (!b) return;
+  path = path.slice(0, +b.dataset.step + 1); renderNode();
+});
+$("nodeBody").addEventListener("click", e => {
+  const v = e.target.closest("[data-view]");
+  if (v) { view = v.dataset.view; renderNode(); return; }
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const here = path[path.length - 1], node = here.node, a = +b.dataset.act;
+  const avg = Solver.avg(node), r2 = here.reach.slice();
+  r2[node.player] = Solver.scaled(here.reach[node.player], avg, a, node.m);
+  path.push({ node: node.children[a], reach: r2, label: `${solver.names[node.player]} ${node.labels[a]}` });
+  renderNode();
+});
+
+loadPreset("aaa");
+solve();
+</script>
+</body>
+</html>
